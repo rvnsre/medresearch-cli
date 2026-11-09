@@ -1,0 +1,7 @@
+SYNTHETIC TRAINING DOCUMENT — NOT A REAL PATIENT
+Patient: Example Person
+DOB: 1970-01-01
+Report type: laboratory report text
+Specimen: synthetic sample
+Laboratory finding: synthetic value.
+Interpretation: deliberately omitted. This fixture is for software workflow testing only.

@@ -1,0 +1,5 @@
+include LICENSE README.md SECURITY.md VALIDATION.md requirements-verified.txt .env.example .gitattributes
+recursive-include tests *.py
+recursive-include examples *.txt
+recursive-include docs *.json
+recursive-include .github *.yml
