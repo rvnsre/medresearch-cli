@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -48,12 +49,23 @@ def private_path(path: Path) -> Path:
     return path
 
 
+def default_data_dir() -> Path:
+    override = os.getenv("MEDRESEARCH_DATA_DIR")
+    if override:
+        return Path(override).expanduser()
+    if sys.platform == "win32":
+        return Path(os.getenv("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "MedResearch"
+    if sys.platform == "darwin":
+        return Path.home() / "Library/Application Support/MedResearch"
+    xdg = Path(os.getenv("XDG_DATA_HOME", str(Path.home() / ".local/share")))
+    if not xdg.is_absolute():
+        xdg = Path.home() / ".local/share"
+    return xdg / "MedResearch"
+
+
 @dataclass(frozen=True)
 class Settings:
-    data_dir: Path = field(default_factory=lambda: Path(os.getenv(
-        "MEDRESEARCH_DATA_DIR",
-        str(Path(os.getenv("LOCALAPPDATA", str(Path.home() / ".local/share"))) / "MedResearch"),
-    )))
+    data_dir: Path = field(default_factory=default_data_dir)
     ollama_url: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_OLLAMA_URL", "http://127.0.0.1:11434"))
     model: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_MODEL", ""))
     ollama_context: int = field(default_factory=context_setting)

@@ -25,6 +25,29 @@ anonymization. Model-selected relationships still require full clinical appraisa
 Without AI, it exports reviewed source text and literature; it does not claim to
 have assessed findings or contradictions.
 
+## Windows, Linux and macOS
+
+The same Python package and CLI/API run on all three operating systems.
+CI tests and builds Python 3.11/3.12 on Windows, Linux and macOS.
+
+On Linux and macOS:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -c requirements-verified.txt -e '.[dev]'
+.venv/bin/medresearch doctor
+export MEDRESEARCH_API_TOKEN="$(.venv/bin/medresearch token)"
+.venv/bin/medresearch serve
+```
+
+Install Tesseract and the aze/rus/eng language data through your operating system's
+package manager or the official Tesseract installation guidance linked below.
+Ollama is optional and is configured the same way on each platform.
+Private data defaults to `%LOCALAPPDATA%/MedResearch` on Windows,
+`~/Library/Application Support/MedResearch` on macOS, and
+`$XDG_DATA_HOME/MedResearch` (or `~/.local/share/MedResearch`) on Linux.
+`MEDRESEARCH_DATA_DIR` overrides these defaults.
+
 ## Install on Windows
 
 Python 3.11+ is required. From the checkout:
