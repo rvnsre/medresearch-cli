@@ -1,11 +1,11 @@
-# Release validation — 0.1.0
+# Release validation — 0.1.1
 
 Validation uses synthetic documents only. No real patient documents were used or published.
 
 ## Verified locally
 
 - Windows, Python 3.11.9: editable package installation and dependency consistency.
-- 37 passing automated tests, with 89% measured statement coverage across the package.
+- 67 passing tests and 90% measured statement coverage across the package.
 - CLI/API, extraction, storage, approval, PubMed and AI-adapter integration tests.
 - Real PubMed request from the installed CLI: three article records retrieved;
   Markdown and JSON reports exported, followed by local case deletion.
@@ -21,6 +21,10 @@ and encrypted files, XML entity rejection, bounded retrieval retries, caching,
 document review, approval expiry/invalidation/replay, exact external AI request
 matching, provenance filtering, prompt injection output rejection, restart recovery,
 case deletion cascades, private error responses and Markdown escaping.
+The audit adds authentication-before-parsing, chunked request limits, buffering
+concurrency, slow-body timeout, bounded network reads, cloud-alias/context guards,
+AI completion-envelope checks, Git checkout protection and atomic-export tests.
+Unexpected API/CLI exception messages are also checked for private-data leakage.
 
 ## Explicit limits
 

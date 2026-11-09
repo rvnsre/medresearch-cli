@@ -68,6 +68,13 @@ medresearch doctor
 
 The default Ollama endpoint is `http://127.0.0.1:11434`. Only loopback HTTP is
 accepted for the local adapter; remote/cloud Ollama must use the external path.
+Before any document text is sent, the local adapter inspects `/api/tags` and
+`/api/show`. Remote/cloud aliases, missing models and unverifiable context
+metadata are rejected. A loopback address by itself does not make a model local.
+For sensitive work, disable cloud on the separate Ollama server using
+`OLLAMA_NO_CLOUD=1` before starting that server, as described in the official
+[Ollama FAQ](https://github.com/ollama/ollama/blob/main/docs/faq.mdx).
+Setting that variable only in this client does not reconfigure an already-running server.
 `doctor` checks configured model availability and OCR dependencies. You can use
 `--provider none` without either OCR (for text files/PDFs) or a model.
 
@@ -110,8 +117,11 @@ pages invalidates earlier approvals and reports for the case.
 Limits: 20 MiB per upload, 100 PDF pages, 30 megapixels per rendered image,
 200,000 extracted characters per document/case and 1–50 papers per search.
 PDFs must be unencrypted. OCR has a 60-second per-page timeout. Very large cases
-may exceed a selected model's context even within these limits; the result then
-falls back to source-only output, without silent input truncation.
+may exceed a selected model's context even within these limits. The local adapter
+uses the smaller of the model's advertised context and `MEDRESEARCH_OLLAMA_CONTEXT`
+(default 32768), reserves output capacity and applies a conservative UTF-8 byte
+estimate including template overhead. Oversized input falls back to source-only
+output before document text is sent. This estimate is not a tokenizer guarantee.
 
 ### External AI: two separate approvals
 
@@ -142,6 +152,9 @@ review. The API key is supplied only as an Authorization header and is never
 included in the preview. A compatible provider must support non-streaming
 `POST /chat/completions` and JSON response format. Redirects and environment
 HTTP proxies are disabled for research/AI clients.
+Responses are read incrementally with byte caps and identity encoding; unexpected
+compression, redirects and incomplete model responses are rejected. The external
+provider must return `finish_reason: "stop"` for a completed response.
 
 Masking removes some labeled names/identifiers, emails, dates and phones.
 **It cannot guarantee anonymity** and may alter clinically relevant dates. Review
@@ -171,6 +184,10 @@ Invoke-RestMethod "$base/openapi.json" -Headers $headers |
 
 All endpoints, including the OpenAPI schema, require the bearer token. Browser
 Origin requests are rejected; v1 has no browser UI or third-party CDN docs assets.
+Authentication precedes JSON/multipart parsing. At most four requests are buffered
+concurrently, with a 30-second body-transfer deadline. Invalid or contradictory
+Content-Length headers are rejected. Upload overflow returns 413 even without
+Content-Length; a stalled body returns 408.
 
 | Method | Route | Input / result |
 | --- | --- | --- |
@@ -194,6 +211,8 @@ invalid input, HTTP 401 missing/invalid credentials, HTTP 413 oversized requests
 API calls and explicitly requested CLI output contain local private data. Do not
 capture them in public logs. Deleting a case does not remove user-created page
 JSON files, exported reports, backups or OS temporary files. See [SECURITY.md](SECURITY.md).
+Data directories and report export paths inside any Git checkout are rejected.
+Report replacement is atomic; a failed export preserves an existing report.
 
 ## Report interpretation
 
@@ -228,5 +247,7 @@ See [VALIDATION.md](VALIDATION.md) for release verification and remaining limits
 Architecture: `extract` handles page extraction, `storage` SQLite and invalidation,
 `service` workflow/approval orchestration, `pubmed` retrieval, `ai` schema and
 provenance filtering, `reporting` safe Markdown, and thin `cli`/`api` interfaces.
+
+The 0.1.1 audit, reproduced defects and fixes are documented in [AUDIT.md](AUDIT.md).
 
 MIT licensed. Contribute only synthetic fixtures and never real patient data.

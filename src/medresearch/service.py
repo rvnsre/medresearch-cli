@@ -23,6 +23,7 @@ class Service:
         self.ai = ai or AI(settings)
 
     def add(self, case_id: str, name: str, content: bytes):
+        self.store.case(case_id)
         pages = extract(name, content, self.settings)
         # Original uploads are never persisted; only page text and warnings are stored.
         name = name.replace("\\", "/").rsplit("/", 1)[-1][:200]

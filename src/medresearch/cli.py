@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from .api import create_app
 from .config import ResearchError, Settings
+from .exporting import write_report
 from .models import Page, Provider, ReviewRequest
 from .reporting import markdown
 from .runtime import workspace
@@ -49,6 +50,11 @@ def active():
         message = str(error) if isinstance(error, ResearchError) else "Invalid input or inaccessible local file."
         typer.echo("Error: " + message, err=True)
         raise typer.Exit(1) from None
+    except (typer.Exit, typer.Abort):
+        raise
+    except Exception as error:
+        typer.echo(f"Error: Operation failed ({type(error).__name__}).", err=True)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -62,6 +68,8 @@ def doctor():
     result = {"data_directory": str(settings.data_dir), "configured_model": settings.model or None,
               "api_token_configured": len(settings.api_token) >= 24,
               "external_configured": bool(settings.external_url and settings.external_key and settings.model)}
+    result["local_ai_notice"] = "Ollama models are preflight-checked. Disable cloud on the Ollama server for sensitive data."
+    result["ollama_context_cap"] = settings.ollama_context
     pytesseract.pytesseract.tesseract_cmd = settings.tesseract_cmd
     try:
         result["ocr_languages"] = pytesseract.get_languages(config="")
@@ -163,11 +171,7 @@ def report(job_id: str, format: Annotated[str, typer.Option()] = "markdown",
         result = service.report(job_id)
         text = markdown(result) if format == "markdown" else json.dumps(result, ensure_ascii=False, indent=2)
         if out:
-            source_root = Path(__file__).resolve().parents[2]
-            if out.resolve().is_relative_to(source_root):
-                raise ResearchError("Export reports outside the source checkout to avoid publishing private data.")
-            out.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            out.write_text(text, encoding="utf-8")
+            write_report(out, text)
             typer.echo("Report exported.")
         else:
             typer.echo(text)

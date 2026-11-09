@@ -12,11 +12,21 @@ Approval expires after 15 minutes, is single-use, and is revoked by document edi
 Digest approval means the application transmits exactly the reviewed payload;
 it does not mean the payload is safe or the research is clinically correct.
 
+Local Ollama inference requires model-list/details preflight. Remote/cloud aliases
+and unverifiable context capacity are blocked before sending document text. Disable
+cloud in the Ollama server itself (`OLLAMA_NO_CLOUD=1` before server startup) for
+sensitive work. Metadata inspection is not protection against a compromised local
+server or concurrent changes by another locally privileged actor.
+
 Original uploads are processed then discarded; extracted text is kept in SQLite.
 Multipart uploads may be temporarily spooled by the framework/OS before parsing.
 Reports, preview payloads, reviewed page text and search cache can contain private
 data. Do not commit them. The default data directory is outside the checkout.
 API responses disable caching; access logs are disabled by the CLI server.
+The API authenticates before body parsing, bounds request buffering/concurrency
+and times out slow bodies. Network readers stop at their byte cap, require identity
+encoding and reject redirects. Reports are atomically exported using private temp
+files, and private data/export paths inside Git checkouts are refused.
 Do not put identifiers in URLs, case titles, filenames, command-line arguments or queries.
 Shell history and redirected CLI output are outside this application's control.
 

@@ -11,7 +11,13 @@ class ResearchError(Exception):
 
 
 def check_url(value: str, *, local: bool = False) -> str:
-    url = urlsplit(value)
+    if any(ord(c) < 33 or ord(c) == 127 for c in value):
+        raise ResearchError("Service URL must not contain whitespace or control characters.")
+    try:
+        url = urlsplit(value)
+        _ = url.port  # Validate malformed or out-of-range ports without exposing the supplied URL.
+    except ValueError:
+        raise ResearchError("Invalid service URL or port.") from None
     if url.username or url.password or url.query or url.fragment:
         raise ResearchError("Service URL must not contain credentials, query, or fragment.")
     if local:
@@ -22,6 +28,26 @@ def check_url(value: str, *, local: bool = False) -> str:
     return value.rstrip("/")
 
 
+def context_setting() -> int:
+    try:
+        value = int(os.getenv("MEDRESEARCH_OLLAMA_CONTEXT", "32768"))
+        if not 1024 <= value <= 262144:
+            raise ValueError
+        return value
+    except ValueError:
+        raise ResearchError("MEDRESEARCH_OLLAMA_CONTEXT must be an integer from 1024 to 262144.") from None
+
+
+def private_path(path: Path) -> Path:
+    path = path.resolve()
+    source_root = Path(__file__).resolve().parents[2]
+    if (source_root / "pyproject.toml").exists() and path.is_relative_to(source_root):
+        raise ResearchError("Store private case data outside the source checkout.")
+    if any((parent / ".git").exists() for parent in (path, *path.parents)):
+        raise ResearchError("Store private case data outside any Git checkout.")
+    return path
+
+
 @dataclass(frozen=True)
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.getenv(
@@ -30,6 +56,7 @@ class Settings:
     )))
     ollama_url: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_OLLAMA_URL", "http://127.0.0.1:11434"))
     model: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_MODEL", ""))
+    ollama_context: int = field(default_factory=context_setting)
     external_url: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_EXTERNAL_URL", ""))
     external_key: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_EXTERNAL_KEY", ""))
     api_token: str = field(default_factory=lambda: os.getenv("MEDRESEARCH_API_TOKEN", ""))
@@ -41,10 +68,9 @@ class Settings:
     approval_ttl: int = 900
 
     def __post_init__(self):
-        object.__setattr__(self, "data_dir", self.data_dir.resolve())
-        source_root = Path(__file__).resolve().parents[2]
-        if (source_root / "pyproject.toml").exists() and self.data_dir.is_relative_to(source_root):
-            raise ResearchError("Store private case data outside the source checkout.")
-        check_url(self.ollama_url, local=True)
+        if type(self.ollama_context) is not int or not 1024 <= self.ollama_context <= 262144:
+            raise ResearchError("Ollama context must be an integer from 1024 to 262144.")
+        object.__setattr__(self, "data_dir", private_path(self.data_dir))
+        object.__setattr__(self, "ollama_url", check_url(self.ollama_url, local=True))
         if self.external_url:
-            check_url(self.external_url)
+            object.__setattr__(self, "external_url", check_url(self.external_url))

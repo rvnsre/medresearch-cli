@@ -91,10 +91,11 @@ class Store:
                    "WHERE case_id=? AND state IN ('awaiting_review','completed')", (case_id,))
 
     def add_document(self, case_id, name, pages):
-        self.case(case_id)
         doc_id = uuid4().hex
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone() is None:
+                raise ResearchError("Case not found.")
             self.invalidate(db, case_id)
             db.execute("INSERT INTO documents(id,case_id,name,pages) VALUES (?,?,?,?)",
                        (doc_id, case_id, name, encode(pages)))
@@ -135,8 +136,9 @@ class Store:
         return [{**dict(r), "preview": json.loads(r["preview"])} for r in rows]
 
     def delete(self, case_id):
-        self.case(case_id)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone() is None:
+                raise ResearchError("Case not found.")
             self.invalidate(db, case_id)
             db.execute("DELETE FROM cases WHERE id=?", (case_id,))

@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field
 
+from . import __version__
+from .boundary import LocalBoundary
 from .config import ResearchError, Settings
 from .models import Page, ResearchRequest, ReviewRequest, StrictModel
 from .reporting import markdown
@@ -26,7 +28,7 @@ class DocumentReview(StrictModel):
 
 def create_app(settings: Settings | None = None, *, service=None):
     settings = settings or Settings()
-    if len(settings.api_token) < 24:
+    if len(settings.api_token) < 24 or not settings.api_token.isascii() or any(c.isspace() for c in settings.api_token):
         raise ResearchError("Set MEDRESEARCH_API_TOKEN to a random token of at least 24 characters.")
 
     @asynccontextmanager
@@ -47,8 +49,9 @@ def create_app(settings: Settings | None = None, *, service=None):
                                 headers={"WWW-Authenticate": "Bearer"})
 
     # Disable public schema/docs routes: protected routes below expose them after authentication.
-    app = FastAPI(title="MedResearch", version="0.1.0", lifespan=lifespan,
+    app = FastAPI(title="MedResearch", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None, dependencies=[Depends(authenticate)])
+    app.add_middleware(LocalBoundary, settings=settings)
 
     @app.exception_handler(ResearchError)
     async def domain_error(request, error):
@@ -62,40 +65,9 @@ def create_app(settings: Settings | None = None, *, service=None):
         ])
         return await request_validation_exception_handler(request, sanitized)
 
-    @app.middleware("http")
-    async def local_boundary(request, call_next):
-        if request.headers.get("host", "").split(":")[0] not in {"127.0.0.1", "localhost", "testserver"}:
-            return JSONResponse(status_code=400, content={"detail": "Loopback host required."})
-        # No browser clients are part of v1. Reject cross-origin and CSRF-style calls.
-        if request.headers.get("origin"):
-            return JSONResponse(status_code=403, content={"detail": "Browser-origin requests disabled."})
-        try:
-            length = int(request.headers.get("content-length", "0"))
-        except ValueError:
-            return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length."})
-        if length > settings.max_bytes + 1024 * 1024:
-            return JSONResponse(status_code=413, content={"detail": "Request too large."})
-        # Bound chunked requests too, before multipart parsing allocates disk/memory.
-        total = 0
-        receive = request._receive
-
-        async def bounded_receive():
-            nonlocal total
-            message = await receive()
-            total += len(message.get("body", b""))
-            if total > settings.max_bytes + 1024 * 1024:
-                raise HTTPException(status_code=413, detail="Request too large.")
-            return message
-
-        request._receive = bounded_receive
-        response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        return response
-
     @app.get("/health")
     def health():
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": __version__}
 
     @app.get("/openapi.json", include_in_schema=False)
     def schema():

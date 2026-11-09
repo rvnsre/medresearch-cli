@@ -10,6 +10,7 @@ from defusedxml import ElementTree as ET
 
 from .config import ResearchError
 from .models import Article
+from .network import bounded_request
 from .storage import Store, encode
 
 BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -70,25 +71,15 @@ class PubMed:
                     time.sleep(delay)
                 _last_request = time.monotonic()
             try:
-                if self.client:
-                    response = self.client.get(f"{BASE}/{path}", params=params)
-                else:
-                    with httpx.Client(timeout=25, follow_redirects=False, trust_env=False) as client:
-                        response = client.get(f"{BASE}/{path}", params=params)
-                if response.status_code == 429 or response.status_code >= 500:
-                    if attempt < 2:
-                        time.sleep(0.5 * 2**attempt)
-                        continue
-                response.raise_for_status()
-                if len(response.content) > 10_000_000:
-                    raise ResearchError("PubMed response exceeded size limit.")
-                return response
-            except (httpx.TimeoutException, httpx.NetworkError):
-                if attempt < 2:
-                    time.sleep(0.5 * 2**attempt)
-                    continue
-            except httpx.HTTPStatusError:
-                break
+                return bounded_request(self.client, "GET", f"{BASE}/{path}", params=params,
+                                       limit=10_000_000, label="PubMed")
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError):
+                pass
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code != 429 and error.response.status_code < 500:
+                    break
+            if attempt < 2:
+                time.sleep(0.5 * 2**attempt)
         raise ResearchError("PubMed unavailable after bounded retries; try again later.")
 
     def search(self, case_id: str, preview: dict) -> list[Article]:
@@ -111,6 +102,8 @@ class PubMed:
             articles = [] if not ids else parse_articles(self._get("efetch.fcgi", {
                 "db": "pubmed", "id": ",".join(ids), "retmode": "xml", "tool": "medresearch-cli",
             }).text)
+            if any(article.pmid not in ids for article in articles):
+                raise ResearchError("PubMed returned an article outside the approved search results.")
         except ResearchError:
             raise
         except (ValueError, KeyError, TypeError):

@@ -101,7 +101,8 @@ def test_external_is_separate_exact_payload_approval(service, reviewed_case):
 
     def handler(request):
         sent.append(request)
-        return httpx.Response(200, json={"choices": [{"message": {"content": '{"findings":[],"conflicts":[]}'}}]})
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop",
+                                                     "message": {"content": '{"findings":[],"conflicts":[]}'}}]})
 
     service.settings = settings
     service.ai = AI(settings, httpx.Client(transport=httpx.MockTransport(handler)))
